@@ -27,3 +27,6 @@ TAGS
 
 # coredumps
 *.core
+
+/zig/zuo.o
+/zig/zuo.o.o
