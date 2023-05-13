@@ -70,8 +70,6 @@ static const char *zuo_lib_path = ZUO_LIB_PATH;
 
 static const char *zuo_file_logging = NULL;
 static int zuo_logging = 0;
-static int zuo_probe_each = 0;
-static int zuo_probe_counter = 0;
 
 static void zuo_configure() {
   const char *s;
@@ -82,13 +80,6 @@ static void zuo_configure() {
 
   if (getenv("ZUO_LOG"))
     zuo_logging = 1;
-
-  if ((s = getenv("ZUO_PROBE_EACH"))) {
-    while (isdigit(*s)) {
-      zuo_probe_each = (zuo_probe_each * 10) + (s[0] - '0');
-      s++;
-    }
-  }
 }
 
 /*======================================================================*/
@@ -3095,14 +3086,6 @@ static zuo_t *env_lookup(zuo_t *env, zuo_t *sym) {
 
 static void interp_step() {
   zuo_t *e = Z.o_interp_e;
-
-  if (zuo_probe_each) {
-    zuo_probe_counter++;
-    if ((zuo_probe_counter % zuo_probe_each) == 0) {
-      fprintf(stderr, "probe %d:\n", zuo_probe_counter);
-      zuo_stack_trace();
-    }
-  }
 
   if (e->tag == zuo_symbol_tag) {
     zuo_t *val = env_lookup(Z.o_interp_env, e);
