@@ -5,13 +5,10 @@
 #define ZUO_VERSION 1
 #define ZUO_MINOR_VERSION 6
 
-# define ZUO_UNIX
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
-#ifdef ZUO_UNIX
 # include <fcntl.h>
 # include <unistd.h>
 # include <errno.h>
@@ -23,7 +20,6 @@
 # include <dirent.h>
 # include <signal.h>
 # include <poll.h>
-#endif
 
 #if 0
 # include <assert.h>
@@ -36,7 +32,6 @@
    worry about Y2038 or large file sizes. `zuo_int32_t` should be a
    32-bit integer type, obviously. `zuo_intptr_t` is an integer the
    same width as a pointer. */
-#ifdef ZUO_UNIX
 #include <stdint.h>
 
 typedef int64_t zuo_int_t;
@@ -49,7 +44,6 @@ typedef intptr_t zuo_intptr_t;
 typedef uintptr_t zuo_uintptr_t;
 
 typedef int zuo_raw_handle_t;
-#endif
 
 #define ZUO_HANDLE_ID(h) ((zuo_int_t)(h))
 
@@ -317,10 +311,8 @@ static struct {
     /* for cycle detection */
     zuo_t *o_pending_modules;
 
-#ifdef ZUO_UNIX
     /* process status table */
     zuo_t *o_pid_table;
-#endif
     zuo_t *o_fd_table;
     zuo_t *o_cleanable_table;
 
@@ -1336,15 +1328,11 @@ static void zuo_init_terminal() {
 }
 
 static zuo_raw_handle_t zuo_get_std_handle(int which) {
-#ifdef ZUO_UNIX
   return which;
-#endif
 }
 
 int zuo_is_terminal(zuo_raw_handle_t fd) {
-#ifdef ZUO_UNIX
   return isatty(fd);
-#endif
 }
 
 static void zuo_print_terminal(int which, const char *str) {
@@ -3353,7 +3341,7 @@ zuo_t *zuo_kernel_eval(zuo_t *e) {
 
 #if defined(__APPLE__) && defined(__MACH__)
 # include <crt_externs.h>
-#elif defined(ZUO_UNIX)
+#else
 extern char **environ;
 #endif
 
@@ -3361,7 +3349,6 @@ static zuo_t *zuo_get_envvars()
 {
   zuo_t *first = z.o_null, *last = NULL, *pr;
 
-#ifdef ZUO_UNIX
   {
     zuo_int_t i, j;
     char **ea, *p;
@@ -3382,13 +3369,11 @@ static zuo_t *zuo_get_envvars()
       last = pr;
     }
   }
-#endif
   return first;
 }
 
 static void *zuo_envvars_block(const char *who, zuo_t *envvars)
 {
-#ifdef ZUO_UNIX
   char **r, *s;
   intptr_t len = 0, slen, c, count = 0;
   zuo_t *l;
@@ -3419,7 +3404,6 @@ static void *zuo_envvars_block(const char *who, zuo_t *envvars)
   r[c] = NULL;
 
   return r;
-#endif
 }
 
 
@@ -3427,10 +3411,8 @@ static void *zuo_envvars_block(const char *who, zuo_t *envvars)
 /* paths                                                                */
 /*======================================================================*/
 
-#ifdef ZUO_UNIX
 # define ZUO_IS_PATH_SEP(c) ((c) == '/')
 # define ZUO_PATH_SEP '/'
-#endif
 
 static int zuo_is_path_string(zuo_t *obj) {
   return zuo_is_string_without_nul(obj);
@@ -3480,9 +3462,7 @@ static void check_module_path(const char *who, zuo_t *obj) {
 }
 
 static int zuo_path_is_absolute(const char *p) {
-#ifdef ZUO_UNIX
   return p[0] == '/';
-#endif
 }
 
 static zuo_t *zuo_relative_path_p(zuo_t *obj) {
@@ -3498,10 +3478,8 @@ static char *zuo_getcwd() {
   s = malloc(len);
   while (1) {
     int bigger;
-#ifdef ZUO_UNIX
     dir = getcwd(s, len);
     bigger = !dir && (errno == ERANGE);
-#endif
     if (dir)
       break;
     if (bigger) {
@@ -3847,10 +3825,8 @@ static zuo_t *zuo_finish_runtime_env(zuo_t *ht) {
 
   {
     zuo_t *type, *toolchain;
-#ifdef ZUO_UNIX
     type = toolchain = zuo_symbol("unix");
     ht = zuo_hash_set(ht, zuo_symbol("can-exec?"), z.o_true);
-#endif
     ht = zuo_hash_set(ht, zuo_symbol("system-type"), type);
     ht = zuo_hash_set(ht, zuo_symbol("toolchain-type"), toolchain);
   }
@@ -3883,10 +3859,8 @@ static void check_options_consumed(const char *who, zuo_t *options) {
 /* files/streams                                                        */
 /*======================================================================*/
 
-#ifdef ZUO_UNIX
 /* Maybe not necessary, since we use `SA_RESTART`, but just in case: */
 # define EINTR_RETRY(e) do { } while (((e) == -1) && (errno == EINTR))
-#endif
 
 static zuo_t *zuo_fd_handle(zuo_raw_handle_t handle, zuo_handle_status_t status, int is_pipe) {
   zuo_t *h = zuo_handle(handle, status);
@@ -3912,7 +3886,6 @@ static zuo_t *zuo_drain(zuo_raw_handle_t fd, zuo_int_t amount) {
     zuo_int_t got;
     zuo_int_t amt = sz - offset;
     if (amt > 4096) amt = 4096;
-#ifdef ZUO_UNIX
     {
       int old_fl, r;
 
@@ -3936,7 +3909,6 @@ static zuo_t *zuo_drain(zuo_raw_handle_t fd, zuo_int_t amount) {
         if (r == -1) zuo_fail("failed to restore flags of file descriptor");
       }
     }
-#endif
 
     if (got < 0)
       zuo_fail("error reading stream");
@@ -3973,9 +3945,7 @@ static void zuo_fill(const char *s, zuo_int_t len, zuo_raw_handle_t fd) {
     zuo_int_t did;
     zuo_int_t amt = len - done;
     if (amt > 4096) amt = 4096;
-#ifdef ZUO_UNIX
     EINTR_RETRY(did = write(fd, s + done, amt));
-#endif
 
     if (did < 0)
       zuo_fail("error writing to stream");
@@ -3986,9 +3956,7 @@ static void zuo_fill(const char *s, zuo_int_t len, zuo_raw_handle_t fd) {
 
 static void zuo_close_handle(zuo_raw_handle_t handle)
 {
-#ifdef ZUO_UNIX
   EINTR_RETRY(close(handle));
-#endif
 }
 
 static void zuo_close(zuo_raw_handle_t handle)
@@ -4012,11 +3980,9 @@ static zuo_raw_handle_t zuo_fd_open_input_handle(zuo_t *path, zuo_t *options) {
       fprintf(lf, "\n");
       fclose(lf);
     }
-#ifdef ZUO_UNIX
     EINTR_RETRY(fd = open(ZUO_STRING_PTR(path), O_RDONLY));
     if (fd == -1)
       zuo_fail1w_errno(who, "file open failed", path);
-#endif
     return fd;
   } else if (path == zuo_symbol("stdin")) {
     check_hash(who, options);
@@ -4030,10 +3996,8 @@ static zuo_raw_handle_t zuo_fd_open_input_handle(zuo_t *path, zuo_t *options) {
 
     check_hash(who, options);
     check_options_consumed(who, options);
-#ifdef ZUO_UNIX
     fd = (zuo_raw_handle_t)ZUO_INT_I(path);
     return fd;
-#endif
   }
 }
 
@@ -4057,7 +4021,6 @@ static zuo_t *zuo_fd_open_output(zuo_t *path, zuo_t *options) {
 
     check_options_consumed(who, options);
 
-#ifdef ZUO_UNIX
     {
       int mode = O_CREAT | O_EXCL;
 
@@ -4082,7 +4045,6 @@ static zuo_t *zuo_fd_open_output(zuo_t *path, zuo_t *options) {
       if (fd == -1)
         zuo_fail1w_errno(who, "file open failed", path);
     }
-#endif
     fd_h = zuo_fd_handle(fd, zuo_handle_open_fd_out_status, 0);
 
     return fd_h;
@@ -4102,10 +4064,8 @@ static zuo_t *zuo_fd_open_output(zuo_t *path, zuo_t *options) {
       zuo_fail_arg(who, "path string, 'stdout, 'stderr, or nonnegative integer", path);
     check_hash(who, options);
     check_options_consumed(who, options);
-#ifdef ZUO_UNIX    
     fd = zuo_get_std_handle((zuo_raw_handle_t)ZUO_INT_I(path));
     return zuo_handle(fd, zuo_handle_open_fd_out_status);
-#endif
   }
 }
 
@@ -4175,9 +4135,7 @@ zuo_t *zuo_fd_poll(zuo_t *fds_i, zuo_t *timeout_i) {
   const char *who = "fd-poll";
   zuo_t *l;
   zuo_int_t len = 0, which = -1, timeout;
-#ifdef ZUO_UNIX
   struct pollfd *fds;
-#endif
 
   for (l = fds_i; l != z.o_null; l = _zuo_cdr(l)) {
     if ((l->tag != zuo_pair_tag)
@@ -4194,7 +4152,6 @@ zuo_t *zuo_fd_poll(zuo_t *fds_i, zuo_t *timeout_i) {
   else
     zuo_fail_arg(who, "nonnegative integer or #f", timeout_i);
 
-#ifdef ZUO_UNIX
   /* loop until on of the handles is marked as done */
   {
     zuo_int_t i;
@@ -4226,7 +4183,6 @@ zuo_t *zuo_fd_poll(zuo_t *fds_i, zuo_t *timeout_i) {
     else
       zuo_fail1w_errno(who, "poll failed", fds_i);
   }
-#endif
 
   for (l = fds_i; which > 0; l = _zuo_cdr(l))
     which--;
@@ -4249,7 +4205,6 @@ static zuo_t *zuo_fd_terminal_p(zuo_t *fd_h, zuo_t *ansi) {
 static zuo_t *zuo_fd_valid_p(zuo_t *fd_h) {
   zuo_check_input_output_fd("fd-valid?", fd_h);
 
-#ifdef ZUO_UNIX
   {
     int r;
     zuo_raw_handle_t fd;
@@ -4259,9 +4214,6 @@ static zuo_t *zuo_fd_valid_p(zuo_t *fd_h) {
 
     return (r == -1) ? z.o_false : z.o_true;
   }
-#else
-  return z.o_true;
-#endif
 }
 
 static char *zuo_string_to_c(zuo_t *obj) {
@@ -4592,7 +4544,6 @@ static zuo_t *zuo_stat(zuo_t *path, zuo_t *follow_links, zuo_t *false_on_error) 
 
   check_path_string(who, path);
 
-#ifdef ZUO_UNIX
   {
     struct stat stat_buf;
     int stat_result;
@@ -4631,7 +4582,6 @@ static zuo_t *zuo_stat(zuo_t *path, zuo_t *follow_links, zuo_t *false_on_error) 
     result = zuo_hash_set(result, zuo_symbol("creation-time-seconds"), zuo_integer(stat_buf.zuo_st_ctim.tv_sec));
     result = zuo_hash_set(result, zuo_symbol("creation-time-nanoseconds"), zuo_integer(stat_buf.zuo_st_ctim.tv_nsec));
   }
-#endif
 
   return result;
 }
@@ -4639,10 +4589,8 @@ static zuo_t *zuo_stat(zuo_t *path, zuo_t *follow_links, zuo_t *false_on_error) 
 static zuo_t *zuo_rm(zuo_t *file_path) {
   const char *who = "rm";
   check_path_string(who, file_path);
-#ifdef ZUO_UNIX
   if (unlink(ZUO_STRING_PTR(file_path)) == 0)
     return z.o_void;
-#endif
   zuo_fail1w_errno(who, "failed", file_path);
   return z.o_undefined;
 }
@@ -4651,10 +4599,8 @@ static zuo_t *zuo_mv(zuo_t *from_path, zuo_t *to_path) {
   const char *who = "mv";
   check_path_string(who, from_path);
   check_path_string(who, to_path);
-#ifdef ZUO_UNIX
   if (rename(ZUO_STRING_PTR(from_path), ZUO_STRING_PTR(to_path)) == 0)
     return z.o_void;
-#endif
   zuo_fail1w_errno(who, "failed", zuo_cons(from_path, zuo_cons(to_path, z.o_null)));
   return z.o_undefined;
 }
@@ -4662,10 +4608,8 @@ static zuo_t *zuo_mv(zuo_t *from_path, zuo_t *to_path) {
 static zuo_t *zuo_mkdir(zuo_t *dir_path) {
   const char *who = "mkdir";
   check_path_string(who, dir_path);
-#ifdef ZUO_UNIX
   if (mkdir(ZUO_STRING_PTR(dir_path), 0777) == 0)
     return z.o_void;
-#endif
   zuo_fail1w_errno(who, "failed", dir_path);
   return z.o_undefined;
 }
@@ -4673,10 +4617,8 @@ static zuo_t *zuo_mkdir(zuo_t *dir_path) {
 static zuo_t *zuo_rmdir(zuo_t *dir_path) {
   const char *who = "rmdir";
   check_path_string(who, dir_path);
-#ifdef ZUO_UNIX
   if (rmdir(ZUO_STRING_PTR(dir_path)) == 0)
     return z.o_void;
-#endif
   zuo_fail1w_errno(who, "failed", dir_path);
   return z.o_undefined;
 }
@@ -4684,7 +4626,6 @@ static zuo_t *zuo_rmdir(zuo_t *dir_path) {
 static zuo_t *zuo_ls(zuo_t *dir_path) {
   const char *who = "ls";
   check_path_string(who, dir_path);
-#ifdef ZUO_UNIX
   {
     DIR *dir;
     struct dirent *e;
@@ -4711,13 +4652,11 @@ static zuo_t *zuo_ls(zuo_t *dir_path) {
 
     return first;
   }
-#endif
 }
 
 static zuo_t *zuo_readlink(zuo_t *link_path) {
   const char *who = "readlink";
   check_path_string(who, link_path);
-#ifdef ZUO_UNIX
   {
     int len, buf_len = 256;
     char *buffer = malloc(buf_len);
@@ -4739,7 +4678,6 @@ static zuo_t *zuo_readlink(zuo_t *link_path) {
     free(buffer);
     return str;
   }
-#endif
   return z.o_undefined;
 }
 
@@ -4747,10 +4685,8 @@ static zuo_t *zuo_ln(zuo_t *target_path, zuo_t *link_path) {
   const char *who = "symlink";
   check_path_string(who, target_path);
   check_path_string(who, link_path);
-#ifdef ZUO_UNIX
   if (symlink(ZUO_STRING_PTR(target_path), ZUO_STRING_PTR(link_path)) == 0)
     return z.o_void;
-#endif
   zuo_fail1w_errno(who, "failed", zuo_cons(target_path, zuo_cons(link_path, z.o_null)));
   return z.o_undefined;
 }
@@ -4779,7 +4715,6 @@ static zuo_t *zuo_cp(zuo_t *src_path, zuo_t *dest_path, zuo_t *options) {
 
   check_options_consumed(who, options);
 
-#ifdef ZUO_UNIX
   {
     int src_fd, dest_fd;
     struct stat st_buf;
@@ -4824,12 +4759,10 @@ static zuo_t *zuo_cp(zuo_t *src_path, zuo_t *dest_path, zuo_t *options) {
     EINTR_RETRY(close(src_fd));
     EINTR_RETRY(close(dest_fd));
   }
-#endif
   return z.o_void;
 }
 
 zuo_t *zuo_current_time() {
-#ifdef ZUO_UNIX
   /* clock_gettime() provides more precision but ay require linking
      to an extra library */
 # ifdef USE_CLOCK_REALTIME
@@ -4845,7 +4778,6 @@ zuo_t *zuo_current_time() {
   return zuo_cons(zuo_integer(t.tv_sec),
                   zuo_integer(t.tv_usec * 1000));
 # endif
-#endif
 }
 
 /*======================================================================*/
@@ -4856,14 +4788,12 @@ static int zuo_signal_suspended = 0;
 
 static zuo_t *zuo_suspend_signal() {
   if (zuo_signal_suspended++ == 0) {
-#ifdef ZUO_UNIX
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
     sigaddset(&set, SIGTERM);
     sigaddset(&set, SIGHUP);
     sigprocmask(SIG_BLOCK, &set, NULL);
-#endif
   }
   return z.o_void;
 }
@@ -4873,14 +4803,12 @@ static zuo_t *zuo_resume_signal() {
     return z.o_void;
 
   if (--zuo_signal_suspended == 0) {
-#ifdef ZUO_UNIX
     sigset_t set;
     sigemptyset(&set);
     sigaddset(&set, SIGINT);
     sigaddset(&set, SIGTERM);
     sigaddset(&set, SIGHUP);
     sigprocmask(SIG_UNBLOCK, &set, NULL);
-#endif
   }
   return z.o_void;
 }
@@ -4909,10 +4837,8 @@ static void zuo_clean_all(int skip_suspend) {
     zuo_t *k = _zuo_car(l);
     zuo_t *v = trie_lookup(Z.o_cleanable_table, ((zuo_handle_t *)k)->id);
     if (v->tag == zuo_handle_tag) {
-#ifdef ZUO_UNIX
       int stat_loc;
       EINTR_RETRY(waitpid(ZUO_HANDLE_RAW(v), &stat_loc, 0));
-#endif
     }
   }
 
@@ -4921,9 +4847,7 @@ static void zuo_clean_all(int skip_suspend) {
     zuo_t *k = _zuo_car(l);
     zuo_t *v = trie_lookup(Z.o_cleanable_table, ((zuo_handle_t *)k)->id);
     if (v->tag == zuo_string_tag) {
-#ifdef ZUO_UNIX
       (void)unlink(ZUO_STRING_PTR(v));
-#endif
     }
   }
 
@@ -4933,21 +4857,17 @@ static void zuo_clean_all(int skip_suspend) {
     zuo_resume_signal();
 }
 
-#ifdef ZUO_UNIX
 static void zuo_signal_received() {
   zuo_clean_all(0);
   _exit(1);
 }
-#endif
 
 static void zuo_init_signal_handler() {
-#ifdef ZUO_UNIX
   struct sigaction sa;
   sigemptyset(&sa.sa_mask);
   sa.sa_flags = SA_RESTART;
   sa.sa_handler = zuo_signal_received;
   sigaction(SIGINT, &sa, NULL);
-#endif
 }
 
 /* signal must be suspended */
@@ -4990,7 +4910,6 @@ static zuo_t *zuo_cleanable_cancel(zuo_t *p) {
 /* shell command-line parsing                                           */
 /*======================================================================*/
 
-#ifdef ZUO_UNIX
 static char *zuo_string_to_shell_c(const char *s) {
   zuo_intptr_t sz = 32, i = 0;
   int quoting = 0;
@@ -5117,7 +5036,6 @@ static char **zuo_shell_to_strings_c(char *buf, int skip_exe, zuo_intptr_t *_len
 
   return command;
 }
-#endif
 
 static zuo_t *zuo_string_to_shell(zuo_t *str) {
   char *s;
@@ -5157,7 +5075,6 @@ static zuo_t *zuo_shell_to_strings(zuo_t *str, zuo_t *starts_exe) {
 
 static void zuo_pipe(zuo_raw_handle_t *_r, zuo_raw_handle_t *_w)
 {
-#ifdef ZUO_UNIX
   {
     int fd[2], r;
     EINTR_RETRY(r = pipe(fd));
@@ -5166,7 +5083,6 @@ static void zuo_pipe(zuo_raw_handle_t *_r, zuo_raw_handle_t *_w)
     *_r = fd[0];
     *_w = fd[1];
   }
-#endif
 }
 
 zuo_t *zuo_process(zuo_t *command_and_args)
@@ -5210,11 +5126,9 @@ zuo_t *zuo_process(zuo_t *command_and_args)
 
   argv = malloc(sizeof(char*) * (argc + 1));
 
-#ifdef ZUO_UNIX
   if (!zuo_path_is_absolute(ZUO_STRING_PTR(command))
       && (_zuo_car(zuo_split_path(command)) == z.o_false))
     command = zuo_build_raw_path2(zuo_string("."), command);
-#endif
 
   argv[0] = zuo_string_to_c(command);
   for (i = argc; i-- > 1; ) {
@@ -5310,14 +5224,11 @@ zuo_t *zuo_process(zuo_t *command_and_args)
     if (argc != 2)
       zuo_fail1w(who, "too many arguments for 'exact? mode", opt);
   }
-#ifdef ZUO_UNIX
   if (exact_cmdline)
     zuo_fail1w(who, "'exact? mode not suported", opt);
-#endif
 
   check_options_consumed(who, options);
 
-#ifdef ZUO_UNIX
   {
     zuo_t *open_fds = zuo_trie_keys(Z.o_fd_table, z.o_null);
 
@@ -5378,16 +5289,13 @@ zuo_t *zuo_process(zuo_t *command_and_args)
       ok = 0;
     }
   }
-#endif
 
   if (ok) {
     p_handle = zuo_handle(pid, zuo_handle_process_running_status);
-#ifdef ZUO_UNIX
     {
       int added = 0;
       Z.o_pid_table = trie_extend(Z.o_pid_table, pid, p_handle, p_handle, &added);
     }
-#endif
     if (!no_wait)
       zuo_register_cleanable(p_handle, p_handle);
   }
@@ -5448,7 +5356,6 @@ zuo_t *zuo_process_wait(zuo_t *pids_i) {
       zuo_fail_arg("process-wait", "process handle", p);
   }
 
-#ifdef ZUO_UNIX
   /* loop until on of the handles is marked as done */
   while (1) {
     pid_t pid;
@@ -5487,7 +5394,6 @@ zuo_t *zuo_process_wait(zuo_t *pids_i) {
     } else
       zuo_fail("process wait failed");
   }
-#endif
 }
 
 /*======================================================================*/
@@ -6378,9 +6284,7 @@ static void zuo_runtime_init(zuo_t *lib_path, zuo_t *runtime_env) {
   Z.o_pending_modules = z.o_null;
   Z.o_stash = z.o_false;
 
-#ifdef ZUO_UNIX
   Z.o_pid_table = z.o_empty_hash;
-#endif
   Z.o_fd_table = z.o_empty_hash;
   Z.o_cleanable_table = z.o_empty_hash;
 
@@ -6569,11 +6473,9 @@ int zuo_main(int argc, char **argv) {
   return 0;
 }
 
-# ifdef ZUO_UNIX
 int main(int argc, char **argv) {
   return zuo_main(argc, argv);
 }
-# endif
 
 #endif
 
